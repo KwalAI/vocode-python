@@ -44,7 +44,7 @@ class DatabaseExporter:
                         # Can send logs to Slack from here
                         self.slack_client.chat_postMessage(
                             channel="#errors",
-                            text=f"ERROR: {span.attributes['message']}",
+                            text=f"ERROR: ```{span.attributes['message']}```",
                         )
                         record_data["log"].append({"ERROR": span.attributes["message"]})
                         record_data.setdefault("error_log", []).append(
