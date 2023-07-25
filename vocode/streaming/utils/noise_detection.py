@@ -21,19 +21,17 @@ class NoiseDetector:
         audio_data = librosa.util.buf_to_float(audio_data)
         n_fft = min(len(audio_data), 2048)
         stft_matrix = librosa.stft(audio_data, n_fft=n_fft)
+        magnitude_spectogram = np.abs(stft_matrix)
+        magnitude_spectogram = np.mean(
+            magnitude_spectogram, axis=1
+        )  # merge across time axis into a 1 dimensional array containing magnitude of each frequency bin
+        threshold = np.mean(magnitude_spectogram) + np.std(magnitude_spectogram)
+        num_bins_above_threshold = np.sum(magnitude_spectogram > threshold)
+        print("num bins above threshold", num_bins_above_threshold)
 
-        # y, sr = librosa.load(io.BytesIO(chunk), sr=None)
         # # audio_segment = AudioSegment(
         # #     data=chunk, sample_width=2, frame_rate=16000, channels=1
         # # )
-        # stft_matrix = librosa.stft(y)
-
-        magnitude_spectogram = np.abs(stft_matrix)
-        magnitude_spectogram = np.mean(magnitude_spectogram, axis=1)
-        average_magnitude = np.mean(magnitude_spectogram)
-        num_bins_above_threshold = np.sum(magnitude_spectogram > average_magnitude)
-        print("num bins above threshold", num_bins_above_threshold)
-
         # dbfs_value = audio_segment.dBFS
         # self.dbfs_values.append(dbfs_value)
 
