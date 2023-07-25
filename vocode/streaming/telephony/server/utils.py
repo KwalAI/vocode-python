@@ -41,11 +41,14 @@ class DatabaseExporter:
             for span in spans:
                 if span.name == "log_span":
                     if span.attributes["level"] == "ERROR":
-                        # Can send logs to Slack from here
-                        self.slack_client.chat_postMessage(
-                            channel="#errors",
-                            text=f"ERROR: ```{span.attributes['message']}```",
-                        )
+                        if "+15109014093" in (
+                            from_phone,
+                            to_phone,
+                        ):  # only send to slack if prod number
+                            self.slack_client.chat_postMessage(
+                                channel="#errors",
+                                text=f"ERROR: ```{span.attributes['message']}```",
+                            )
                         record_data["log"].append({"ERROR": span.attributes["message"]})
                         record_data.setdefault("error_log", []).append(
                             {"ERROR": span.attributes["message"]}
