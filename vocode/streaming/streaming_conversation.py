@@ -8,6 +8,8 @@ from typing import Any, Awaitable, Callable, Generic, Optional, Tuple, TypeVar, 
 import logging
 import time
 import typing
+from pydub import AudioSegment
+from vocode.streaming.utils.noise_detection import NoiseDetector
 
 from vocode.streaming.action.worker import ActionsWorker
 
@@ -137,7 +139,9 @@ class StreamingConversation(Generic[OutputDeviceType]):
                     )
                     self.output_queue.put_nowait(event)
             except Exception as e:
-                self.conversation.logger.error(f"Error {e}, Trace: {traceback.format_exc()}")
+                self.conversation.logger.error(
+                    f"Error {e}, Trace: {traceback.format_exc()}"
+                )
 
     class FillerAudioWorker(InterruptibleWorker):
         """
@@ -280,7 +284,9 @@ class StreamingConversation(Generic[OutputDeviceType]):
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                self.conversation.logger.error(f"Error {e}, Trace: {traceback.format_exc()}")
+                self.conversation.logger.error(
+                    f"Error {e}, Trace: {traceback.format_exc()}"
+                )
 
     class SynthesisResultsWorker(InterruptibleWorker):
         """Plays SynthesisResults from the output queue on the output device"""
@@ -332,7 +338,9 @@ class StreamingConversation(Generic[OutputDeviceType]):
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                self.conversation.logger.error(f"Error {e}, Trace: {traceback.format_exc()}")
+                self.conversation.logger.error(
+                    f"Error {e}, Trace: {traceback.format_exc()}"
+                )
 
     def __init__(
         self,
@@ -381,6 +389,8 @@ class StreamingConversation(Generic[OutputDeviceType]):
             conversation=self,
             interruptible_event_factory=self.interruptible_event_factory,
         )
+        self.noise_detector = NoiseDetector()
+
         self.actions_worker = None
         if self.agent.get_agent_config().actions:
             self.actions_worker = ActionsWorker(
@@ -508,7 +518,23 @@ class StreamingConversation(Generic[OutputDeviceType]):
         self.transcriptions_worker.consume_nonblocking(transcription)
 
     def receive_audio(self, chunk: bytes):
-        self.transcriber.send_audio(chunk)
+        if not self.noise_detector.interrupted:
+            self.transcriber.send_audio(chunk)
+            self.noise_detector.receive_audio(chunk)
+        if self.noise_detector.send_noise_interrupt():
+            self.noise_detector.sent_interrupt()
+            self.broadcast_interrupt()
+            self.transcriber.terminate()
+            self.agent_responses_worker.consume_nonblocking(
+                self.interruptible_event_factory.create(
+                    AgentResponseMessage(
+                        message=BaseMessage(
+                            text="I'm sorry but I'm unable to understand you at the moment due to the noise in your environment. Let's try the call again at a later time when you are in a less noisy environemnt. Sorry for the inconvenience! You may now end the call."
+                        )
+                    ),
+                    False,
+                )
+            )
 
     def warmup_synthesizer(self):
         self.synthesizer.ready_synthesizer()
