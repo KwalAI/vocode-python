@@ -7,9 +7,13 @@ import threading
 from typing import Any, Awaitable, Callable, Generic, Optional, Tuple, TypeVar, cast
 import logging
 import time
+import numpy as np
+import librosa
+import matplotlib.pyplot as plt
 import typing
 from pydub import AudioSegment
-from vocode.streaming.utils.noise_detection import NoiseDetector
+
+# from vocode.streaming.utils.noise_detection import NoiseDetector
 
 from vocode.streaming.action.worker import ActionsWorker
 
@@ -342,6 +346,72 @@ class StreamingConversation(Generic[OutputDeviceType]):
                     f"Error {e}, Trace: {traceback.format_exc()}"
                 )
 
+    class NoiseDetector:
+        def __init__(self, conversation: "StreamingConversation"):
+            self.conversation = conversation
+            self.last_print_time = time.time()
+            self.magnitude_threshold = 2.5
+            self.bins_above_threshold_list = []
+            self.window_size = 50
+            self.bins_threshold = 35
+            self.noise_count = 0
+            self.prev_noise_time = time.time()
+
+        def receive_audio(self, chunk: bytes):
+            audio_data = np.frombuffer(chunk, dtype=np.int16)
+            audio_data = librosa.util.buf_to_float(audio_data)
+            n_fft = min(len(audio_data), 2048)
+            stft_matrix = librosa.stft(audio_data, n_fft=n_fft)
+            magnitude_spectogram = np.abs(stft_matrix)
+            magnitude_spectogram = np.mean(magnitude_spectogram, axis=1)
+            num_bins_above_threshold = np.sum(
+                magnitude_spectogram > self.magnitude_threshold
+            )
+            self.bins_above_threshold_list.append(num_bins_above_threshold)
+            if len(self.bins_above_threshold_list) > self.window_size:
+                self.bins_above_threshold_list.pop(0)
+            moving_avg_bins_above_threshold = np.mean(self.bins_above_threshold_list)
+            if time.time() - self.last_print_time > 1:
+                self.last_print_time = time.time()
+                print("curr moving avg", moving_avg_bins_above_threshold)
+            if moving_avg_bins_above_threshold > self.bins_threshold:
+                self.handle_noise()
+
+        def handle_noise(self):
+            wait_time = {0: 10, 1: 20, 2: 30}
+            curr_time = time.time()
+            if self.noise_count not in wait_time or (
+                curr_time - self.prev_noise_time < wait_time[self.noise_count]
+            ):
+                return
+            self.noise_count += 1
+            self.prev_noise_time = curr_time
+            if self.noise_count == 1:
+                self.send_noise_message(
+                    "Also, I'm detecting some noise in your environment, which is affecting the quality of the call. Please try moving to a quieter place.",
+                    False,
+                )
+            if self.noise_count == 2:
+                self.send_noise_message(
+                    "I'm still having trouble with the call due to the noise. Please try moving to a quieter place.",
+                    False,
+                )
+            if self.noise_count == 3:
+                self.send_noise_message(
+                    "Sorry, let's try the call again later when you are in a quieter environment, as the noise is disrupting the quality of the call. You may now end the call. Goodbye!",
+                    True,
+                )
+
+        def send_noise_message(self, message, interrupt):
+            if interrupt:
+                self.conversation.broadcast_interrupt()
+                self.conversation.transcriber.terminate()
+            self.conversation.agent_responses_worker.consume_nonblocking(
+                self.conversation.interruptible_event_factory.create(
+                    AgentResponseMessage(message=BaseMessage(text=message)), interrupt
+                )
+            )
+
     def __init__(
         self,
         output_device: OutputDeviceType,
@@ -389,7 +459,7 @@ class StreamingConversation(Generic[OutputDeviceType]):
             conversation=self,
             interruptible_event_factory=self.interruptible_event_factory,
         )
-        self.noise_detector = NoiseDetector()
+        self.noise_detector = self.NoiseDetector(conversation=self)
 
         self.actions_worker = None
         if self.agent.get_agent_config().actions:
@@ -518,23 +588,8 @@ class StreamingConversation(Generic[OutputDeviceType]):
         self.transcriptions_worker.consume_nonblocking(transcription)
 
     def receive_audio(self, chunk: bytes):
-        if not self.noise_detector.interrupted:
-            self.transcriber.send_audio(chunk)
-            self.noise_detector.receive_audio(chunk)
-        if self.noise_detector.send_noise_interrupt():
-            self.noise_detector.sent_interrupt()
-            self.broadcast_interrupt()
-            self.transcriber.terminate()
-            self.agent_responses_worker.consume_nonblocking(
-                self.interruptible_event_factory.create(
-                    AgentResponseMessage(
-                        message=BaseMessage(
-                            text="I'm sorry but I'm unable to understand you at the moment due to the noise in your environment. Let's try the call again at a later time when you are in a less noisy environemnt. Sorry for the inconvenience! You may now end the call."
-                        )
-                    ),
-                    False,
-                )
-            )
+        self.transcriber.send_audio(chunk)
+        self.noise_detector.receive_audio(chunk)
 
     def warmup_synthesizer(self):
         self.synthesizer.ready_synthesizer()
