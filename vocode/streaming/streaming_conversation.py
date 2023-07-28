@@ -37,6 +37,7 @@ from vocode.streaming.constants import (
     TEXT_TO_SPEECH_CHUNK_SIZE_SECONDS,
     PER_CHUNK_ALLOWANCE_SECONDS,
     ALLOWED_IDLE_TIME,
+    MESSAGES,
 )
 from vocode.streaming.agent.base_agent import (
     AgentInput,
@@ -325,6 +326,8 @@ class StreamingConversation(Generic[OutputDeviceType]):
                     self.conversation.transcript.update_last_bot_message_on_cut_off(
                         message_sent
                     )
+                if message_sent in MESSAGES.values():
+                    await self.conversation.terminate()
                 if self.conversation.agent.agent_config.end_conversation_on_goodbye:
                     goodbye_detected_task = (
                         self.conversation.agent.create_goodbye_detection_task(
@@ -373,7 +376,7 @@ class StreamingConversation(Generic[OutputDeviceType]):
             moving_avg_bins_above_threshold = np.mean(self.bins_above_threshold_list)
             if time.time() - self.last_print_time > 1:
                 self.last_print_time = time.time()
-                print("curr moving avg", moving_avg_bins_above_threshold)
+                # print("curr moving avg", moving_avg_bins_above_threshold)
             if moving_avg_bins_above_threshold > self.bins_threshold:
                 self.handle_noise()
 
@@ -388,27 +391,19 @@ class StreamingConversation(Generic[OutputDeviceType]):
             self.prev_noise_time = curr_time
             if self.noise_count == 1:
                 self.send_noise_message(
-                    "Also, I'm detecting some noise in your environment, which is affecting the quality of the call. Please try moving to a quieter place.",
-                    False,
+                    "Also, I'm detecting some noise in your environment, which is affecting the quality of the call. Please try moving to a quieter place."
                 )
             if self.noise_count == 2:
                 self.send_noise_message(
-                    "I'm still having trouble with the call due to the noise. Please try moving to a quieter place.",
-                    False,
+                    "I'm still having trouble with the call due to the noise. Please try moving to a quieter place."
                 )
             if self.noise_count == 3:
-                self.send_noise_message(
-                    "Sorry, let's try the call again later when you are in a quieter environment, as the noise is disrupting the quality of the call. You may now end the call. Goodbye!",
-                    True,
-                )
+                self.send_noise_message(MESSAGES["NOISE_DISRUPTION"])
 
-        def send_noise_message(self, message, interrupt):
-            if interrupt:
-                self.conversation.broadcast_interrupt()
-                self.conversation.transcriber.terminate()
+        def send_noise_message(self, message):
             self.conversation.agent_responses_worker.consume_nonblocking(
                 self.conversation.interruptible_event_factory.create(
-                    AgentResponseMessage(message=BaseMessage(text=message)), interrupt
+                    AgentResponseMessage(message=BaseMessage(text=message)), False
                 )
             )
 
