@@ -9,9 +9,7 @@ import logging
 import time
 import numpy as np
 import librosa
-import matplotlib.pyplot as plt
 import typing
-from pydub import AudioSegment
 
 # from vocode.streaming.utils.noise_detection import NoiseDetector
 
