@@ -11,8 +11,16 @@ import typing
 from opentelemetry import trace
 from opentelemetry.trace import Span
 from vocode.streaming.action.factory import ActionFactory
-from vocode.streaming.action.phone_call_action import TwilioPhoneCallAction, VonagePhoneCallAction
-from vocode.streaming.models.actions import ActionInput, ActionOutput, FunctionCall, FunctionFragment
+from vocode.streaming.action.phone_call_action import (
+    TwilioPhoneCallAction,
+    VonagePhoneCallAction,
+)
+from vocode.streaming.models.actions import (
+    ActionInput,
+    ActionOutput,
+    FunctionCall,
+    FunctionFragment,
+)
 
 from vocode.streaming.models.agent import (
     AgentConfig,
@@ -198,7 +206,8 @@ class RespondAgent(BaseAgent[AgentConfigType]):
         )
         is_first_response = True
         function_call = None
-        async for response in responses:
+        async for tuple in responses:
+            response, should_stop = tuple
             if isinstance(response, FunctionCall):
                 function_call = response
                 continue
@@ -207,12 +216,15 @@ class RespondAgent(BaseAgent[AgentConfigType]):
                 is_first_response = False
             self.produce_interruptible_event_nonblocking(
                 AgentResponseMessage(message=BaseMessage(text=response)),
-                is_interruptible=self.agent_config.allow_agent_to_be_cut_off,
+                is_interruptible=self.agent_config.allow_agent_to_be_cut_off
+                and not should_stop,
             )
+            # if should_stop:
+            #     return True
         # TODO: implement should_stop for generate_responses
         agent_span.end()
         if function_call and self.agent_config.actions is not None:
-                self.call_function(function_call, agent_input)
+            self.call_function(function_call, agent_input)
         return False
 
     async def handle_respond(
@@ -331,7 +343,9 @@ class RespondAgent(BaseAgent[AgentConfigType]):
                 agent_input.conversation_id,
                 params,
             )
-        event = self.interruptible_event_factory.create(action_input, is_interruptible=action.is_interruptible)
+        event = self.interruptible_event_factory.create(
+            action_input, is_interruptible=action.is_interruptible
+        )
         assert self.transcript is not None
         self.transcript.add_action_start_log(
             action_input=action_input,
