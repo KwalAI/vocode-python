@@ -101,8 +101,14 @@ class StreamingConversation(Generic[OutputDeviceType]):
 
         async def process(self, transcription: Transcription):
             try:
+                self.conversation.logger.debug(
+                    f"Processing transcription, {transcription}"
+                )
                 self.conversation.mark_last_action_timestamp()
-                if transcription.message.strip() == "":
+                if (
+                    transcription.message.strip() == ""
+                    and transcription.confidence == 0.0
+                ):
                     self.conversation.logger.info("Ignoring empty transcription")
                     return
                 if transcription.is_final:
@@ -119,6 +125,7 @@ class StreamingConversation(Generic[OutputDeviceType]):
                         or 0
                     )
                 ):
+                    self.conversation.logger.debug("BROADCASTING INTERRUPT")
                     self.conversation.current_transcription_is_interrupt = (
                         self.conversation.broadcast_interrupt()
                     )
