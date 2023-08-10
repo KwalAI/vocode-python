@@ -8,6 +8,12 @@ from typing import Any, Awaitable, Callable, Generic, Optional, Tuple, TypeVar, 
 import logging
 import time
 import numpy as np
+import torch
+from vocode.streaming.models.vad import VADProcessor
+from pydub import AudioSegment
+import io
+import soundfile as sf
+import webrtcvad
 import librosa
 import typing
 
@@ -105,10 +111,7 @@ class StreamingConversation(Generic[OutputDeviceType]):
                     f"Processing transcription, {transcription}"
                 )
                 self.conversation.mark_last_action_timestamp()
-                if (
-                    transcription.message.strip() == ""
-                    and transcription.confidence == 0.0
-                ):
+                if transcription.message.strip() == "":
                     self.conversation.logger.info("Ignoring empty transcription")
                     return
                 if transcription.is_final:
@@ -117,26 +120,26 @@ class StreamingConversation(Generic[OutputDeviceType]):
                             transcription.message, transcription.confidence
                         )
                     )
-                if (
-                    not self.conversation.is_human_speaking
-                    and transcription.confidence
-                    >= (
-                        self.conversation.transcriber.get_transcriber_config().min_interrupt_confidence
-                        or 0
-                    )
-                ):
-                    self.conversation.logger.debug("BROADCASTING INTERRUPT")
-                    self.conversation.current_transcription_is_interrupt = (
-                        self.conversation.broadcast_interrupt()
-                    )
-                    if self.conversation.current_transcription_is_interrupt:
-                        self.conversation.logger.debug("sending interrupt")
-                    self.conversation.logger.debug("Human started speaking")
+                # if (
+                #     not self.conversation.is_human_speaking
+                #     and transcription.confidence
+                #     >= (
+                #         self.conversation.transcriber.get_transcriber_config().min_interrupt_confidence
+                #         or 0
+                #     )
+                # ):
+                #     self.conversation.logger.debug("BROADCASTING INTERRUPT")
+                #     self.conversation.current_transcription_is_interrupt = (
+                #         self.conversation.broadcast_interrupt()
+                #     )
+                #     if self.conversation.current_transcription_is_interrupt:
+                #         self.conversation.logger.debug("sending interrupt")
+                #     self.conversation.logger.debug("Human started speaking")
 
                 transcription.is_interrupt = (
                     self.conversation.current_transcription_is_interrupt
                 )
-                self.conversation.is_human_speaking = not transcription.is_final
+                # self.conversation.is_human_speaking = not transcription.is_final
                 if transcription.is_final:
                     # we use getattr here to avoid the dependency cycle between VonageCall and StreamingConversation
                     event = self.interruptible_event_factory.create(
@@ -459,6 +462,7 @@ class StreamingConversation(Generic[OutputDeviceType]):
             conversation=self,
             interruptible_event_factory=self.interruptible_event_factory,
         )
+        self.break_time = None
         self.noise_detector = self.NoiseDetector(conversation=self)
 
         self.actions_worker = None
@@ -508,6 +512,11 @@ class StreamingConversation(Generic[OutputDeviceType]):
         # tracing
         self.start_time: Optional[float] = None
         self.end_time: Optional[float] = None
+        # self.vad = webrtcvad.Vad()
+        # self.vad.set_mode(3)
+        # self.vad_is_speaking = False
+
+        self.vad_processor = VADProcessor()
 
     def create_state_manager(self) -> ConversationStateManager:
         return ConversationStateManager(conversation=self)
@@ -588,6 +597,27 @@ class StreamingConversation(Generic[OutputDeviceType]):
         self.transcriptions_worker.consume_nonblocking(transcription)
 
     def receive_audio(self, chunk: bytes):
+        if len(chunk) == 160:  # ignore first bytes of silence
+            # audio_np = np.frombuffer(chunk, dtype=np.int16)
+            # timestamps = self.vad_processor.get_speech_timestamps(
+            #     model=self.model, audio=audio_np, sample_rate=8000
+            # )
+            # print(timestamps)
+            self.vad_processor.process_audio(chunk)
+
+            # is_speech = self.vad.is_speech(chunk, 8000)
+            # if is_speech:
+            #     self.logger.debug(f"IS SPEECH, curr time is {time.time()}")
+            # if not is_speech and self.vad_is_speaking:
+            #     self.vad_is_speaking = False
+            #     self.logger.debug("Human has stopped speaking")
+
+            # if is_speech and not self.vad_is_speaking:
+            #     self.vad_is_speaking = True
+            #     self.current_transcription_is_interrupt = self.broadcast_interrupt()
+            #     if self.current_transcription_is_interrupt:
+            #         self.logger.debug("sending interrupt")
+            #     self.logger.debug("Human started speaking")
         self.transcriber.send_audio(chunk)
         self.noise_detector.receive_audio(chunk)
 

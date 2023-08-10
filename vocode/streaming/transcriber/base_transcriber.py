@@ -14,6 +14,7 @@ from vocode.streaming.utils.worker import AsyncWorker, ThreadAsyncWorker
 tracer = trace.get_tracer(__name__)
 meter = metrics.get_meter(__name__)
 
+
 class Transcription(BaseModel):
     message: str
     confidence: float
@@ -21,7 +22,7 @@ class Transcription(BaseModel):
     is_interrupt: bool = False
 
     def __str__(self):
-        return f"Transcription({self.message}, {self.confidence}, {self.is_final})"
+        return f"Transcription({self.message}, {self.confidence}, {self.is_final}, {self.is_interrupt})"
 
 
 TranscriberConfigType = TypeVar("TranscriberConfigType", bound=TranscriberConfig)

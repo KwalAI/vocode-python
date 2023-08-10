@@ -139,17 +139,18 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
             # if it is time based, then return true if there is no transcript
             # and there is some speech to send
             # and the time_silent is greater than the cutoff
-            print("SILENT TIME", time_silent + deepgram_response["duration"])
+
+            # print("SILENT TIME", time_silent + deepgram_response["duration"])
             cond = (
                 not transcript
                 and current_buffer
                 and (time_silent + deepgram_response["duration"])
                 > self.transcriber_config.endpointing_config.time_cutoff_seconds
             )
-            if cond:
-                print("SPEECH IS FINAL")
-            else:
-                print("SPEECH IS NOT FINAL")
+            # if cond:
+            #     print("SPEECH IS FINAL")
+            # else:
+            #     print("SPEECH IS NOT FINAL")
             return cond
         elif (
             self.transcriber_config.endpointing_config.type
@@ -167,7 +168,8 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
                 > self.transcriber_config.endpointing_config.time_cutoff_seconds
             )
             if not punct and not time_based:
-                print(f"DEEPGRAM SPEECH FINAL, BOTH FALSE")
+                # print(f"DEEPGRAM SPEECH FINAL, BOTH FALSE")
+                pass
             else:
                 print(f"DEEPGRAM SPEECH FINAL, punct {punct}, TIME BASED, {time_based}")
             return punct or time_based
@@ -220,13 +222,13 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
                         )
                         break
                     data = json.loads(msg)
-                    print(
-                        "DEEPGRAM DATA",
-                        f"Transcript: {data['channel']['alternatives'][0]['transcript']}",
-                        f"Confidence: {data['channel']['alternatives'][0]['confidence']}",
-                        f"Is Final: {data['is_final']}",
-                        f"Speech Final: {data['speech_final']}",
-                    )
+                    # print(
+                    #     "DEEPGRAM DATA",
+                    #     f"Transcript: {data['channel']['alternatives'][0]['transcript']}",
+                    #     f"Confidence: {data['channel']['alternatives'][0]['confidence']}",
+                    #     f"Is Final: {data['is_final']}",
+                    #     f"Speech Final: {data['speech_final']}",
+                    # )
 
                     if (
                         not "is_final" in data
