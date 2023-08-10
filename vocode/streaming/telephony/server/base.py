@@ -16,6 +16,7 @@ from vocode.streaming.telephony.client.vonage_client import VonageClient
 from vocode.streaming.telephony.config_manager.base_config_manager import (
     BaseConfigManager,
 )
+from vocode.streaming.models.vad import VADProcessor
 import urllib.parse
 from vocode.streaming.telephony.server.utils import DatabaseExporter
 from vocode.streaming.telephony.constants import (
@@ -74,6 +75,8 @@ class TelephonyServer:
         events_manager: Optional[EventsManager] = None,
         logger: Optional[logging.Logger] = None,
     ):
+        self.vad_processor = VADProcessor()
+        self.vad_processor.download_and_load_vad_model()
         self.base_url = base_url
         self.logger = logger or logging.getLogger(__name__)
         self.router = APIRouter()
@@ -101,16 +104,20 @@ class TelephonyServer:
         self.router.add_api_route("/events", self.events, methods=["GET", "POST"])
         self.logger.info(f"Set up events endpoint at https://{self.base_url}/events")
 
-        self.router.add_api_route("/recordings/{conversation_id}", self.recordings, methods=["GET", "POST"])
-        self.logger.info(f"Set up recordings endpoint at https://{self.base_url}/recordings/{{conversation_id}}")
- 
+        self.router.add_api_route(
+            "/recordings/{conversation_id}", self.recordings, methods=["GET", "POST"]
+        )
+        self.logger.info(
+            f"Set up recordings endpoint at https://{self.base_url}/recordings/{{conversation_id}}"
+        )
+
     def events(self, request: Request):
         return Response()
 
     async def recordings(self, request: Request, conversation_id: str):
         form_data = await request.body()
         parsed_data = urllib.parse.parse_qs(form_data.decode())
-        recording_url = parsed_data.get('RecordingUrl', [None])[0]
+        recording_url = parsed_data.get("RecordingUrl", [None])[0]
         exporter = DatabaseExporter(conversation_id=conversation_id, logger=self.logger)
         await exporter.recording(recording_url)
         return Response()
@@ -160,7 +167,9 @@ class TelephonyServer:
             conversation_id = create_conversation_id()
             await self.config_manager.save_config(conversation_id, call_config)
             return VonageClient.create_call_ncco(
-                base_url=self.base_url, conversation_id=conversation_id, record=vonage_config.record
+                base_url=self.base_url,
+                conversation_id=conversation_id,
+                record=vonage_config.record,
             )
 
         if isinstance(inbound_call_config, TwilioInboundCallConfig):

@@ -139,26 +139,40 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
             # if it is time based, then return true if there is no transcript
             # and there is some speech to send
             # and the time_silent is greater than the cutoff
-            return (
+
+            # print("SILENT TIME", time_silent + deepgram_response["duration"])
+            cond = (
                 not transcript
                 and current_buffer
                 and (time_silent + deepgram_response["duration"])
                 > self.transcriber_config.endpointing_config.time_cutoff_seconds
             )
+            # if cond:
+            #     print("SPEECH IS FINAL")
+            # else:
+            #     print("SPEECH IS NOT FINAL")
+            return cond
         elif (
             self.transcriber_config.endpointing_config.type
             == EndpointingType.PUNCTUATION_BASED
         ):
-            return (
+            punct = (
                 transcript
                 and deepgram_response["speech_final"]
                 and transcript.strip()[-1] in PUNCTUATION_TERMINATORS
-            ) or (
+            )
+            time_based = (
                 not transcript
                 and current_buffer
                 and (time_silent + deepgram_response["duration"])
                 > self.transcriber_config.endpointing_config.time_cutoff_seconds
             )
+            if not punct and not time_based:
+                # print(f"DEEPGRAM SPEECH FINAL, BOTH FALSE")
+                pass
+            else:
+                print(f"DEEPGRAM SPEECH FINAL, punct {punct}, TIME BASED, {time_based}")
+            return punct or time_based
         raise Exception("Endpointing config not supported")
 
     def calculate_time_silent(self, data: dict):
@@ -208,6 +222,14 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
                         )
                         break
                     data = json.loads(msg)
+                    # print(
+                    #     "DEEPGRAM DATA",
+                    #     f"Transcript: {data['channel']['alternatives'][0]['transcript']}",
+                    #     f"Confidence: {data['channel']['alternatives'][0]['confidence']}",
+                    #     f"Is Final: {data['is_final']}",
+                    #     f"Speech Final: {data['speech_final']}",
+                    # )
+
                     if (
                         not "is_final" in data
                     ):  # means we've finished receiving transcriptions
@@ -234,6 +256,7 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
                         buffer = f"{buffer} {top_choice['transcript']}"
 
                     if speech_final:
+                        # print("speech final, put in queue")
                         self.output_queue.put_nowait(
                             Transcription(
                                 message=buffer, confidence=confidence, is_final=True
@@ -242,6 +265,7 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
                         buffer = ""
                         time_silent = 0
                     elif top_choice["transcript"] and confidence > 0.0:
+                        # print("speech not done, put in queue")
                         self.output_queue.put_nowait(
                             Transcription(
                                 message=buffer,
