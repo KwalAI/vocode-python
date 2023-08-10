@@ -10,6 +10,7 @@ import time
 import numpy as np
 import librosa
 import typing
+import webrtcvad
 
 # from vocode.streaming.utils.noise_detection import NoiseDetector
 
@@ -502,6 +503,11 @@ class StreamingConversation(Generic[OutputDeviceType]):
         self.start_time: Optional[float] = None
         self.end_time: Optional[float] = None
 
+        # vad
+        self.vad = webrtcvad.Vad()
+        self.vad.set_mode(2)
+        self.vad_is_speaking = False
+
     def create_state_manager(self) -> ConversationStateManager:
         return ConversationStateManager(conversation=self)
 
@@ -581,6 +587,23 @@ class StreamingConversation(Generic[OutputDeviceType]):
         self.transcriptions_worker.consume_nonblocking(transcription)
 
     def receive_audio(self, chunk: bytes):
+        if (
+            len(chunk) == 160
+        ):  # reason for this is there is a first chunk of silence broadcasted, after which the actual stream of audio comes in with 160 bytes per chunk
+            is_speech = self.vad.is_speech(chunk, 8000)
+            if is_speech:
+                self.logger.debug(f"IS SPEECH, curr time is {time.time()}")
+            if not is_speech and self.vad_is_speaking:
+                self.vad_is_speaking = False
+                self.logger.debug("Human has stopped speaking")
+
+            if is_speech and not self.vad_is_speaking:
+                self.vad_is_speaking = True
+                self.current_transcription_is_interrupt = self.broadcast_interrupt()
+                if self.current_transcription_is_interrupt:
+                    self.logger.debug("sending interrupt")
+                self.logger.debug("Human started speaking")
+
         self.transcriber.send_audio(chunk)
         self.noise_detector.receive_audio(chunk)
 
