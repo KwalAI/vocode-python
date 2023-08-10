@@ -11,6 +11,8 @@ import numpy as np
 import librosa
 import typing
 
+from vocode.streaming.models.vad import VADProcessor
+
 # from vocode.streaming.utils.noise_detection import NoiseDetector
 
 from vocode.streaming.action.worker import ActionsWorker
@@ -502,6 +504,9 @@ class StreamingConversation(Generic[OutputDeviceType]):
         self.start_time: Optional[float] = None
         self.end_time: Optional[float] = None
 
+        # vad
+        self.vad_processor = VADProcessor()
+
     def create_state_manager(self) -> ConversationStateManager:
         return ConversationStateManager(conversation=self)
 
@@ -581,6 +586,12 @@ class StreamingConversation(Generic[OutputDeviceType]):
         self.transcriptions_worker.consume_nonblocking(transcription)
 
     def receive_audio(self, chunk: bytes):
+        if (
+            len(chunk) == 160
+        ):  # Reason for this is to ignore the first chunk of silence that is sent, after which the regular audio stream starts, which sends 160 chunks per byte.
+            start_time = time.time()
+            self.vad_processor.process_audio(chunk)
+            self.logger.debug(f"Silero VAD processing took {time.time() - start_time}")
         self.transcriber.send_audio(chunk)
         self.noise_detector.receive_audio(chunk)
 
