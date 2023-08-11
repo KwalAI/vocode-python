@@ -101,6 +101,7 @@ class StreamingConversation(Generic[OutputDeviceType]):
 
         async def process(self, transcription: Transcription):
             try:
+                print("Transcription: ", transcription)
                 self.conversation.mark_last_action_timestamp()
                 if transcription.message.strip() == "":
                     self.conversation.logger.info("Ignoring empty transcription")
@@ -489,6 +490,9 @@ class StreamingConversation(Generic[OutputDeviceType]):
                 emotions=self.sentiment_config.emotions
             )
 
+        self.audio_buffer = b""
+        self.chunk_count = 0
+
         self.is_human_speaking = False
         self.active = False
         self.mark_last_action_timestamp()
@@ -581,7 +585,12 @@ class StreamingConversation(Generic[OutputDeviceType]):
         self.transcriptions_worker.consume_nonblocking(transcription)
 
     def receive_audio(self, chunk: bytes):
-        self.transcriber.send_audio(chunk)
+        self.audio_buffer += chunk
+        self.chunk_count += 1
+        if self.chunk_count == 11:
+            self.transcriber.send_audio(self.audio_buffer)
+            self.audio_buffer = b""
+            self.chunk_count = 0
         self.noise_detector.receive_audio(chunk)
 
     def warmup_synthesizer(self):
