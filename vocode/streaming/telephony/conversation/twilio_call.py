@@ -90,10 +90,18 @@ class TwilioCall(Call[TwilioOutputDevice]):
         twilio_call = twilio_call_ref.fetch()
 
         if self.twilio_config.record:
-            recordings_create_params = self.twilio_config.extra_params.get("recordings_create_params") if self.twilio_config.extra_params else None
-            recording = twilio_call_ref.recordings.create(
-                **recordings_create_params
-            ) if recordings_create_params else twilio_call_ref.recordings.create(recording_status_callback=f"https://{self.base_url}/recordings/{self.id}")
+            recordings_create_params = (
+                self.twilio_config.extra_params.get("recordings_create_params")
+                if self.twilio_config.extra_params
+                else None
+            )
+            recording = (
+                twilio_call_ref.recordings.create(**recordings_create_params)
+                if recordings_create_params
+                else twilio_call_ref.recordings.create(
+                    recording_status_callback=f"https://loyal-trip-dev.up.railway.app/recordings/{self.id}"
+                )
+            )
             self.logger.debug(f"Recording: {recording.sid}")
 
         if twilio_call.answered_by in ("machine_start", "fax"):
@@ -157,4 +165,3 @@ class TwilioCall(Call[TwilioOutputDevice]):
     def mark_terminated(self):
         super().mark_terminated()
         asyncio.create_task(self.telephony_client.end_call(self.twilio_sid))
-
