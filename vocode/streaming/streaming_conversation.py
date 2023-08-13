@@ -10,6 +10,7 @@ import time
 import numpy as np
 import librosa
 import typing
+import audioop
 
 # from vocode.streaming.utils.noise_detection import NoiseDetector
 
@@ -64,6 +65,7 @@ from vocode.streaming.utils.worker import (
     InterruptibleEventFactory,
     InterruptibleWorker,
 )
+from pydub import AudioSegment
 
 OutputDeviceType = TypeVar("OutputDeviceType", bound=BaseOutputDevice)
 
@@ -497,6 +499,8 @@ class StreamingConversation(Generic[OutputDeviceType]):
         self.active = False
         self.mark_last_action_timestamp()
 
+        self.chunk_counter = 0
+
         self.check_for_idle_task: Optional[asyncio.Task] = None
         self.track_bot_sentiment_task: Optional[asyncio.Task] = None
 
@@ -587,7 +591,12 @@ class StreamingConversation(Generic[OutputDeviceType]):
     def receive_audio(self, chunk: bytes):
         self.audio_buffer += chunk
         self.chunk_count += 1
-        if self.chunk_count == 11:
+        if self.chunk_count == 100:
+            audio = audioop.ulaw2lin(self.audio_buffer, 1)
+            sound = AudioSegment(audio, sample_width=1, frame_rate=8000, channels=1)
+            # use the chunk counter to export the chunks
+            sound.export(f"chunk{self.chunk_counter}.wav", format="wav")
+            self.chunk_counter += 1
             self.transcriber.send_audio(self.audio_buffer)
             self.audio_buffer = b""
             self.chunk_count = 0
