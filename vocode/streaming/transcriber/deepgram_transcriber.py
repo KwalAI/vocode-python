@@ -60,7 +60,7 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
         self._ended = False
         self.is_ready = False
         self.logger = logger or logging.getLogger(__name__)
-        self.audio_cursor = 0.
+        self.audio_cursor = 0.0
 
     async def _run_loop(self):
         restarts = 0
@@ -169,7 +169,7 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
         return data["duration"]
 
     async def process(self):
-        self.audio_cursor = 0.
+        self.audio_cursor = 0.0
         extra_headers = {"Authorization": f"Token {self.api_key}"}
 
         async with websockets.connect(
@@ -179,9 +179,11 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
             async def sender(ws: WebSocketClientProtocol):  # sends audio to websocket
                 while not self._ended:
                     try:
-                        data = await asyncio.wait_for(self.input_queue.get(), 5)
+                        data = await asyncio.wait_for(self.input_queue.get(), 15)
                     except asyncio.exceptions.TimeoutError as e:
-                        self.logger.error(f"Got error {e} in Deepgram receiver {e}, Trace: {traceback.format_exc()}")
+                        self.logger.error(
+                            f"Got error {e} in Deepgram receiver {e}, Trace: {traceback.format_exc()}"
+                        )
                         break
                     num_channels = 1
                     sample_width = 2
@@ -201,7 +203,9 @@ class DeepgramTranscriber(BaseAsyncTranscriber[DeepgramTranscriberConfig]):
                     try:
                         msg = await ws.recv()
                     except Exception as e:
-                        self.logger.error(f"Got error {e} in Deepgram receiver {e}, Trace: {traceback.format_exc()}")
+                        self.logger.error(
+                            f"Got error {e} in Deepgram receiver {e}, Trace: {traceback.format_exc()}"
+                        )
                         break
                     data = json.loads(msg)
                     if (
