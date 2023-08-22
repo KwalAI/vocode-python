@@ -21,7 +21,7 @@ from vocode.streaming.utils.base_router import BaseRouter
 from vocode.streaming.utils.events_manager import EventsManager
 
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 import traceback
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -108,7 +108,7 @@ class CallsRouter(BaseRouter):
         span_exporter = InMemorySpanExporter()
         database_exporter = DatabaseExporter(id, self.logger)
         span_processor = SimpleSpanProcessor(
-            OTLPSpanExporter(endpoint="http://20.246.143.224:80")
+            OTLPSpanExporter(endpoint="http://otel.kwal.ai/")
         )
         trace.get_tracer_provider().add_span_processor(span_processor)
         tracer = trace.get_tracer(__name__)
