@@ -123,8 +123,8 @@ class TwilioCall(Call[TwilioOutputDevice]):
                 PhoneCallConnectedEvent(
                     conversation_id=self.id,
                     to_phone_number=self.to_phone,
-                    
                     from_phone_number=self.from_phone,
+                    inbound=twilio_call.direction == "inbound",
                 )
             )
             while self.active:

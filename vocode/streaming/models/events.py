@@ -27,6 +27,7 @@ class Event(TypedModel):
 class PhoneCallConnectedEvent(Event, type=EventType.PHONE_CALL_CONNECTED):
     to_phone_number: str
     from_phone_number: str
+    inbound: bool
 
 
 class PhoneCallEndedEvent(Event, type=EventType.PHONE_CALL_ENDED):
