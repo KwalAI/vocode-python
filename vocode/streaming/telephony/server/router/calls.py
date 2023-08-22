@@ -21,6 +21,7 @@ from vocode.streaming.utils.base_router import BaseRouter
 from vocode.streaming.utils.events_manager import EventsManager
 
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 import traceback
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -106,11 +107,14 @@ class CallsRouter(BaseRouter):
     async def connect_call(self, websocket: WebSocket, id: str):
         span_exporter = InMemorySpanExporter()
         database_exporter = DatabaseExporter(id, self.logger)
-        span_processor = SimpleSpanProcessor(span_exporter)
+        span_processor = SimpleSpanProcessor(
+            OTLPSpanExporter(endpoint="http://otel.kwal.ai/")
+        )
         trace.get_tracer_provider().add_span_processor(span_processor)
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span("connect_call") as conversation:
-            if not self.handler_set: self.logger.addHandler(SpanLogHandler())
+            if not self.handler_set:
+                self.logger.addHandler(SpanLogHandler())
             self.handler_set = True
             await websocket.accept()
             self.logger.debug("Phone WS connection opened for chat {}".format(id))
@@ -137,7 +141,11 @@ class CallsRouter(BaseRouter):
         child_spans = span_exporter.get_finished_spans()
 
         try:
-            await database_exporter.export(child_spans, from_phone=call_config.from_phone, to_phone=call_config.to_phone)
+            await database_exporter.export(
+                child_spans,
+                from_phone=call_config.from_phone,
+                to_phone=call_config.to_phone,
+            )
         except Exception as e:
             self.logger.error(f"Error {e}, Trace: {traceback.format_exc()}")
 
