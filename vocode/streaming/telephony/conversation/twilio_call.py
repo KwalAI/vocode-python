@@ -107,9 +107,8 @@ class TwilioCall(Call[TwilioOutputDevice]):
         if twilio_call.answered_by in ("machine_start", "fax"):
             self.logger.info(f"Call answered by {twilio_call.answered_by}")
             twilio_call.update(status="completed")
-
          # if call is not answered by human then send voicemail message 
-        if twilio_call.answered_by not in ('unknown', 'human'):
+        if twilio_call.answered_by not in ('unknown', 'human', None):
             self.events_manager.publish_event(
                 VoicemailEvent(
                 conversation_id=self.id,
