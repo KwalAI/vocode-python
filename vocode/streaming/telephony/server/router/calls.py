@@ -112,6 +112,7 @@ class CallsRouter(BaseRouter):
         with tracer.start_as_current_span("connect_call") as conversation:
             if not self.handler_set: self.logger.addHandler(SpanLogHandler())
             self.handler_set = True
+            self.logger.debug("waiting for websocket to accept")
             await websocket.accept()
             self.logger.debug("Phone WS connection opened for chat {}".format(id))
             self.logger.debug("Kwal vocode being used")
@@ -130,7 +131,10 @@ class CallsRouter(BaseRouter):
                     events_manager=self.events_manager,
                     logger=self.logger,
                 )
+                self.logger.debug("testing here3")
+
                 await call.attach_ws_and_start(websocket)
+                self.logger.debug("testing here4")
             except Exception as e:
                 self.logger.error(f"Error {e}, Trace: {traceback.format_exc()}")
             self.logger.debug("Phone WS connection closed for chat {}".format(id))
