@@ -141,6 +141,7 @@ class TelephonyServer:
                 twilio_sid=twilio_sid,
                 from_phone=twilio_from,
                 to_phone=twilio_to,
+                candidate_number=twilio_from,
             )
 
             conversation_id = create_conversation_id()

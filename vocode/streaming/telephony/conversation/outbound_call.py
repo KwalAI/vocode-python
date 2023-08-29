@@ -132,6 +132,7 @@ class OutboundCall:
                 twilio_sid=self.telephony_id,
                 from_phone=self.from_phone,
                 to_phone=self.to_phone,
+                candidate_number=self.to_phone,
             )
         elif isinstance(self.telephony_client, VonageClient):
             call_config = VonageCallConfig(

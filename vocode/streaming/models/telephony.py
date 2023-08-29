@@ -109,6 +109,7 @@ class BaseCallConfig(TypedModel, type=CallConfigType.BASE.value):
 class TwilioCallConfig(BaseCallConfig, type=CallConfigType.TWILIO.value):
     twilio_config: TwilioConfig
     twilio_sid: str
+    candidate_number: str
 
     @staticmethod
     def default_transcriber_config():
