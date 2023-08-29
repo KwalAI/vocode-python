@@ -53,20 +53,25 @@ class DatabaseExporter:
                         record_data.setdefault("error_log", []).append(
                             {"ERROR": span.attributes["message"]}
                         )
-                    elif span.name == '/connect_call/{id} websocket receive':
-                        continue
                     else:
                         record_data["log"].append(
                             {"message": span.attributes["message"]}
                         )
                 else:
+                    if any(word in span.name for word in ["websocket", "GET", "POST"]):
+                        continue
                     record_data["log"].append(
                         {
                             "name": span.name,
                             "duration": (span.end_time - span.start_time) / 1e9,
                         }
                     )
-            record_data["log"] = json.dumps(record_data["log"], indent=4)
+            json_string = json.dumps(record_data["log"], indent=4)
+            if len(json_string) > 100000:
+                record_data["log"] = json_string[:90000]
+                record_data["log2"] = json_string[90000:]
+            else:
+                record_data["log"] = json_string 
             if "error_log" in record_data:
                 record_data["error_log"] = json.dumps(
                     record_data["error_log"], indent=4
