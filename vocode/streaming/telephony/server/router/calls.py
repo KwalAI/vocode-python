@@ -106,10 +106,8 @@ class CallsRouter(BaseRouter):
 
     async def connect_call(self, websocket: WebSocket, id: str):
         span_exporter = InMemorySpanExporter()
-        tracer_provider = TracerProvider()
         database_exporter = DatabaseExporter(id, self.logger)
         span_processor = SimpleSpanProcessor(span_exporter)
-        trace.set_tracer_provider(tracer_provider)
         trace.get_tracer_provider().add_span_processor(span_processor)
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span("connect_call") as conversation:
