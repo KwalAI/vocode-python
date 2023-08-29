@@ -62,7 +62,7 @@ class Call(StreamingConversation[TelephonyOutputDeviceType]):
         super().__init__(
             output_device,
             transcriber_factory.create_transcriber(transcriber_config, logger=logger),
-            agent_factory.create_agent(agent_config, logger=logger),
+            agent_factory.create_agent(agent_config, logger=logger, conversation_id=conversation_id),
             synthesizer_factory.create_synthesizer(synthesizer_config, logger=logger),
             conversation_id=conversation_id,
             per_chunk_allowance_seconds=0.01,
