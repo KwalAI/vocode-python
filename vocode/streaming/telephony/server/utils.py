@@ -53,6 +53,8 @@ class DatabaseExporter:
                         record_data.setdefault("error_log", []).append(
                             {"ERROR": span.attributes["message"]}
                         )
+                    elif span.name == '/connect_call/{id} websocket receive':
+                        continue
                     else:
                         record_data["log"].append(
                             {"message": span.attributes["message"]}
