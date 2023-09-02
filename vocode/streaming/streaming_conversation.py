@@ -7,7 +7,11 @@ import threading
 from typing import Any, Awaitable, Callable, Generic, Optional, Tuple, TypeVar, cast
 import logging
 import time
+import numpy as np
+import librosa
 import typing
+
+# from vocode.streaming.utils.noise_detection import NoiseDetector
 
 from vocode.streaming.action.worker import ActionsWorker
 
@@ -31,6 +35,7 @@ from vocode.streaming.constants import (
     TEXT_TO_SPEECH_CHUNK_SIZE_SECONDS,
     PER_CHUNK_ALLOWANCE_SECONDS,
     ALLOWED_IDLE_TIME,
+    MESSAGES,
 )
 from vocode.streaming.agent.base_agent import (
     AgentInput,
@@ -137,7 +142,9 @@ class StreamingConversation(Generic[OutputDeviceType]):
                     )
                     self.output_queue.put_nowait(event)
             except Exception as e:
-                self.conversation.logger.error(f"Error {e}, Trace: {traceback.format_exc()}")
+                self.conversation.logger.error(
+                    f"Error {e}, Trace: {traceback.format_exc()}"
+                )
 
     class FillerAudioWorker(InterruptibleWorker):
         """
@@ -280,7 +287,9 @@ class StreamingConversation(Generic[OutputDeviceType]):
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                self.conversation.logger.error(f"Error {e}, Trace: {traceback.format_exc()}")
+                self.conversation.logger.error(
+                    f"Error {e}, Trace: {traceback.format_exc()}"
+                )
 
     class SynthesisResultsWorker(InterruptibleWorker):
         """Plays SynthesisResults from the output queue on the output device"""
@@ -315,6 +324,8 @@ class StreamingConversation(Generic[OutputDeviceType]):
                     self.conversation.transcript.update_last_bot_message_on_cut_off(
                         message_sent
                     )
+                if message_sent in MESSAGES.values():
+                    await self.conversation.terminate()
                 if self.conversation.agent.agent_config.end_conversation_on_goodbye:
                     goodbye_detected_task = (
                         self.conversation.agent.create_goodbye_detection_task(
@@ -332,7 +343,67 @@ class StreamingConversation(Generic[OutputDeviceType]):
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                self.conversation.logger.error(f"Error {e}, Trace: {traceback.format_exc()}")
+                self.conversation.logger.error(
+                    f"Error {e}, Trace: {traceback.format_exc()}"
+                )
+
+    class NoiseDetector:
+        def __init__(self, conversation: "StreamingConversation"):
+            self.conversation = conversation
+            self.last_print_time = time.time()
+            self.magnitude_threshold = 2.5
+            self.bins_above_threshold_list = []
+            self.window_size = 50
+            self.bins_threshold = 35
+            self.noise_count = 0
+            self.prev_noise_time = time.time()
+
+        def receive_audio(self, chunk: bytes):
+            audio_data = np.frombuffer(chunk, dtype=np.int16)
+            audio_data = librosa.util.buf_to_float(audio_data)
+            n_fft = min(len(audio_data), 2048)
+            stft_matrix = librosa.stft(audio_data, n_fft=n_fft)
+            magnitude_spectogram = np.abs(stft_matrix)
+            magnitude_spectogram = np.mean(magnitude_spectogram, axis=1)
+            num_bins_above_threshold = np.sum(
+                magnitude_spectogram > self.magnitude_threshold
+            )
+            self.bins_above_threshold_list.append(num_bins_above_threshold)
+            if len(self.bins_above_threshold_list) > self.window_size:
+                self.bins_above_threshold_list.pop(0)
+            moving_avg_bins_above_threshold = np.mean(self.bins_above_threshold_list)
+            if time.time() - self.last_print_time > 1:
+                self.last_print_time = time.time()
+                # print("curr moving avg", moving_avg_bins_above_threshold)
+            if moving_avg_bins_above_threshold > self.bins_threshold:
+                self.handle_noise()
+
+        def handle_noise(self):
+            wait_time = {0: 10, 1: 20, 2: 30}
+            curr_time = time.time()
+            if self.noise_count not in wait_time or (
+                curr_time - self.prev_noise_time < wait_time[self.noise_count]
+            ):
+                return
+            self.noise_count += 1
+            self.prev_noise_time = curr_time
+            if self.noise_count == 1:
+                self.send_noise_message(
+                    "Also, I'm detecting some noise in your environment, which is affecting the quality of the call. Please try moving to a quieter place."
+                )
+            if self.noise_count == 2:
+                self.send_noise_message(
+                    "I'm still having trouble with the call due to the noise. Please try moving to a quieter place."
+                )
+            if self.noise_count == 3:
+                self.send_noise_message(MESSAGES["NOISE_DISRUPTION"])
+
+        def send_noise_message(self, message):
+            self.conversation.agent_responses_worker.consume_nonblocking(
+                self.conversation.interruptible_event_factory.create(
+                    AgentResponseMessage(message=BaseMessage(text=message)), False
+                )
+            )
 
     def __init__(
         self,
@@ -381,6 +452,8 @@ class StreamingConversation(Generic[OutputDeviceType]):
             conversation=self,
             interruptible_event_factory=self.interruptible_event_factory,
         )
+        self.noise_detector = self.NoiseDetector(conversation=self)
+
         self.actions_worker = None
         if self.agent.get_agent_config().actions:
             self.actions_worker = ActionsWorker(
@@ -509,6 +582,7 @@ class StreamingConversation(Generic[OutputDeviceType]):
 
     def receive_audio(self, chunk: bytes):
         self.transcriber.send_audio(chunk)
+        self.noise_detector.receive_audio(chunk)
 
     def warmup_synthesizer(self):
         self.synthesizer.ready_synthesizer()
@@ -608,7 +682,7 @@ class StreamingConversation(Generic[OutputDeviceType]):
     async def terminate(self):
         self.mark_terminated()
         self.events_manager.publish_event(
-            TranscriptCompleteEvent(conversation_id=self.id, transcript=self.transcript)
+            TranscriptCompleteEvent(conversation_id=self.id, transcript=self.transcript, )
         )
         if self.check_for_idle_task:
             self.logger.debug("Terminating check_for_idle Task")

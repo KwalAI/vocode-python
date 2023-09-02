@@ -8,7 +8,7 @@ from typing import Optional
 from vocode import getenv
 from vocode.streaming.agent.factory import AgentFactory
 from vocode.streaming.models.agent import AgentConfig
-from vocode.streaming.models.events import PhoneCallConnectedEvent,VoicemailEvent
+from vocode.streaming.models.events import PhoneCallConnectedEvent, VoicemailEvent
 
 from vocode.streaming.models.telephony import TwilioConfig
 from vocode.streaming.output_device.twilio_output_device import TwilioOutputDevice
@@ -90,29 +90,34 @@ class TwilioCall(Call[TwilioOutputDevice]):
         twilio_call = twilio_call_ref.fetch()
 
         if self.twilio_config.record:
-            recordings_create_params = self.twilio_config.extra_params.get("recordings_create_params") if self.twilio_config.extra_params else None
-            recording = twilio_call_ref.recordings.create(
-                **recordings_create_params
-            ) if recordings_create_params else twilio_call_ref.recordings.create(recording_status_callback=f"https://{self.base_url}/recordings/{self.id}")
+            recordings_create_params = (
+                self.twilio_config.extra_params.get("recordings_create_params")
+                if self.twilio_config.extra_params
+                else None
+            )
+            recording = (
+                twilio_call_ref.recordings.create(**recordings_create_params)
+                if recordings_create_params
+                else twilio_call_ref.recordings.create(
+                    recording_status_callback=f"https://loyal-trip-dev.up.railway.app/recordings/{self.id}"
+                )
+            )
             self.logger.debug(f"Recording: {recording.sid}")
 
         if twilio_call.answered_by in ("machine_start", "fax"):
             self.logger.info(f"Call answered by {twilio_call.answered_by}")
             twilio_call.update(status="completed")
-
-         # if call is not answered by human then send voicemail message 
-        if twilio_call.answered_by not in ('unknown', 'human'):
+        # if call is not answered by human then send voicemail message
+        if twilio_call.answered_by not in ("unknown", "human", None):
             self.events_manager.publish_event(
                 VoicemailEvent(
+
                 conversation_id=self.id,
                 to_phone_number=self.to_phone,
                 from_phone_number=self.from_phone,
+
                 )
             )
-           
-        
-
-
         else:
             await self.wait_for_twilio_start(ws)
             await super().start()
@@ -120,8 +125,8 @@ class TwilioCall(Call[TwilioOutputDevice]):
                 PhoneCallConnectedEvent(
                     conversation_id=self.id,
                     to_phone_number=self.to_phone,
-                    
                     from_phone_number=self.from_phone,
+                    inbound=twilio_call.direction == "inbound",
                 )
             )
             while self.active:
@@ -129,8 +134,8 @@ class TwilioCall(Call[TwilioOutputDevice]):
                 response = await self.handle_ws_message(message)
                 if response == PhoneCallWebsocketAction.CLOSE_WEBSOCKET:
                     break
-        await self.config_manager.delete_config(self.id)
         await self.tear_down()
+        await self.config_manager.delete_config(self.id)
 
     async def wait_for_twilio_start(self, ws: WebSocket):
         assert isinstance(self.output_device, TwilioOutputDevice)
@@ -172,4 +177,3 @@ class TwilioCall(Call[TwilioOutputDevice]):
     def mark_terminated(self):
         super().mark_terminated()
         asyncio.create_task(self.telephony_client.end_call(self.twilio_sid))
-
