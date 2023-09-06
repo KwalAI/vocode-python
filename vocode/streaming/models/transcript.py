@@ -12,14 +12,14 @@ class EventLog(BaseModel):
     sender: Sender
     timestamp: float
 
-    def to_string(self, include_timestamp: bool = False) -> str:
+    def to_string(self, include_timestamp: bool = True) -> str:
         raise NotImplementedError
 
 
 class Message(EventLog):
     text: str
 
-    def to_string(self, include_timestamp: bool = False) -> str:
+    def to_string(self, include_timestamp: bool = True) -> str:
         if include_timestamp:
             return f"{self.sender.name}: {self.text} ({self.timestamp})"
         return f"{self.sender.name}: {self.text}"
@@ -30,7 +30,7 @@ class ActionStart(EventLog):
     action_type: str
     action_input: ActionInput
 
-    def to_string(self, include_timestamp: bool = False):
+    def to_string(self, include_timestamp: bool = True):
         if include_timestamp:
             return (
                 f"{Sender.ACTION_WORKER.name}: {self.action_input} ({self.timestamp})"
@@ -43,7 +43,7 @@ class ActionFinish(EventLog):
     action_type: str
     action_output: ActionOutput
 
-    def to_string(self, include_timestamp: bool = False):
+    def to_string(self, include_timestamp: bool = True):
         if include_timestamp:
             return (
                 f"{Sender.ACTION_WORKER.name}: {self.action_output} ({self.timestamp})"
@@ -62,7 +62,7 @@ class Transcript(BaseModel):
     def attach_events_manager(self, events_manager: EventsManager):
         self.events_manager = events_manager
 
-    def to_string(self, include_timestamps: bool = False) -> str:
+    def to_string(self, include_timestamps: bool = True) -> str:
         return "\n".join(
             event.to_string(include_timestamp=include_timestamps)
             for event in self.event_logs
@@ -155,7 +155,7 @@ class TranscriptEvent(Event, type=EventType.TRANSCRIPT):
     sender: Sender
     timestamp: float
 
-    def to_string(self, include_timestamp: bool = False) -> str:
+    def to_string(self, include_timestamp: bool = True) -> str:
         if include_timestamp:
             return f"{self.sender.name}: {self.text} ({self.timestamp})"
         return f"{self.sender.name}: {self.text}"
