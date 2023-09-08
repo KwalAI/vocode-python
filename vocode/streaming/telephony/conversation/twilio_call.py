@@ -99,7 +99,7 @@ class TwilioCall(Call[TwilioOutputDevice]):
                 twilio_call_ref.recordings.create(**recordings_create_params)
                 if recordings_create_params
                 else twilio_call_ref.recordings.create(
-                    recording_status_callback=f"https://loyal-trip-dev.up.railway.app/recordings/{self.id}"
+                    recording_status_callback=f"https://callmicroservice-prod.up.railway.app/recordings/{self.id}"
                 )
             )
             self.logger.debug(f"Recording: {recording.sid}")
