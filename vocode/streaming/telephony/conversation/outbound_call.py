@@ -60,6 +60,8 @@ class OutboundCall:
         self.vonage_config = vonage_config
         self.application_id = application_id
         self.candidate_id = candidate_id
+        print()
+        print("Akshit",self.candidate_id, self.application_id)
 
         if not self.twilio_config and not self.vonage_config:
             self.logger.debug(
