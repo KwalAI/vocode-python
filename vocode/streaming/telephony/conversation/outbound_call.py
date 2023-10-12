@@ -38,6 +38,8 @@ class OutboundCall:
         transcriber_config: Optional[TranscriberConfig] = None,
         synthesizer_config: Optional[SynthesizerConfig] = None,
         conversation_id: Optional[str] = None,
+        application_id: Optional[str] = None,
+        candidate_id: Optional[str] = None,
         logger: Optional[logging.Logger] = None,
         mobile_only: bool = True,
         digits: Optional[
@@ -56,6 +58,9 @@ class OutboundCall:
         self.logger = logger or logging.getLogger(__name__)
         self.twilio_config = twilio_config
         self.vonage_config = vonage_config
+        self.application_id = application_id
+        self.candidate_id = candidate_id
+
         if not self.twilio_config and not self.vonage_config:
             self.logger.debug(
                 "No telephony config provided, defaulting to Twilio env vars"
@@ -133,6 +138,10 @@ class OutboundCall:
                 from_phone=self.from_phone,
                 to_phone=self.to_phone,
                 candidate_number=self.to_phone,
+                application_id=self.application_id,
+                candidate_id=self.candidate_id,
+
+                
             )
         elif isinstance(self.telephony_client, VonageClient):
             call_config = VonageCallConfig(
